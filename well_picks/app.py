@@ -11,22 +11,51 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-import helper
+from well_picks import helper ##declairing folder to get helper.py loaded
+
+"""MLB specific packages to work with MySQL database"""
+import sqlalchemy
+
 
 app = Dash(__name__)
 # Create server variable with Flask server object for use with gunicorn
 server = app.server
 
 # load well data
-w = Well.from_las(str(Path("Data") / "Poseidon1Decim.LAS"))
+#w = Well.from_las(str(Path("Data") / "Poseidon1Decim.LAS")) #original example
+"""using COGCC url to load specific log
+   wells is currently converting file to meters"""
+w = Well.from_las('http://ogccweblink.state.co.us/DownloadDocumentPDF.aspx?DocumentId=2821655')
+
+
 df = w.df()
+curve_list = df.columns.tolist()
+curve = curve_list[0]
 
 # sample pick data, eventually load from file or other source into dict
-surface_picks = {"Sea Bed": 520.4, "Montara Formation": 4620, "Plover Formation (Top Volcanics)": 4703.2, "Plover Formation (Top Reservoir)": 4798.4, "Nome Formation": 5079}
+#surface_picks = {"Sea Bed": 520.4, "Montara Formation": 4620, "Plover Formation (Top Volcanics)": 4703.2, "Plover Formation (Top Reservoir)": 4798.4, "Nome Formation": 5079}
+##UNITS NEED TO BE IN Meters this is converted from database
+##This needs to be more of a dynamic read
+surface_picks = {"WASATCH G": 1313.3191,
+                 "FORT UNION": 1368.4852,
+                 "MESAVERDE": 1736.0561,
+                 "WILLIAMS FORK": 1793.9653,
+                 "CAMEO": 2487.3514,
+                 "ROLLINS": 2607.1320,
+                 "CORCORAN": 2743.6757,
+                 "MANCOS": 2795.1844,
+                 "NIOBRARA": 3695.5197,
+                 "DAKOTA": 4163.3648
+                }
+
+
+
 dropdown_options = [{'label': k, 'value': k} for k in list(surface_picks.keys())]
+##Need to make the selector grab the wanted curve
+curve_dropdown_options = [{'label': k, 'value': k} for k in curve_list]
 
 # draw the initial plot
-fig_well_1 = px.line(x=df['ECGR'], y=df.index)
+fig_well_1 = px.line(x=df[curve], y=df.index, labels = {'x':curve, 'y': df.index.name})
 fig_well_1.update_yaxes(autorange="reversed")
 helper.update_picks_on_plot(fig_well_1, surface_picks)
 
@@ -43,6 +72,10 @@ app.layout = html.Div(
             html.Button('Create', id='new-top-button'),
             
             html.Hr(),
+            'Curve Select:', html.Br(),
+            dcc.Dropdown(id='curve-selector', options=curve_dropdown_options, placeholder="Select a curve", style={'width': '200px'}),
+            
+            html.Hr(),
             "Write tops to file:",
             dcc.Input(id='input-save-path', type='text', placeholder='path_to_save_picks.json', value=''),
             html.Button('Save Tops', id='save-button', n_clicks=0),
@@ -53,7 +86,7 @@ app.layout = html.Div(
         ]),
         dcc.Graph(id="well_plot",
                     figure=fig_well_1,
-                    style={'width': '40%', 'height':'900px'},
+                    style={'width': '60%', 'height':'900px'},
                     animate=True), # prevents axis rescaling on graph update
                     
         html.Div([
@@ -120,7 +153,7 @@ def update_figure(surface_picks):
     
     surface_picks = json.loads(surface_picks)
     # regenerate figure with the new horizontal line
-    fig = px.line(x=df['ECGR'], y=df.index)
+    fig = px.line(x=df[curve], y=df.index, labels = {'x':curve, 'y': df.index.name})
     fig.update_yaxes(autorange="reversed")
     helper.update_picks_on_plot(fig, surface_picks)
     
